@@ -1,0 +1,64 @@
+// Base Error UDT
+TYPE UDT_BaseError
+    STRUCT
+        ERROR_ACTIVE    : BOOL := FALSE;      // Error active flag
+        ERROR_TIMESTAMP : DATE_AND_TIME;      // Time of error occurrence
+        ERROR_CODE      : DWORD;              // Error code
+        ERROR_LOCATION  : STRING;             // Error location
+        ERROR_TEXT      : STRING;             // Error description
+    END_STRUCT
+END_TYPE
+
+// Hardware Error UDT
+TYPE UDT_HardwareError EXTENDS UDT_BaseError
+    STRUCT
+        INTERRUPT_CLASS : INT;                // Interrupt classification
+        MODULE_ADDRESS  : INT;                // Module address
+        RACK_NUMBER     : INT;                // Rack number
+    END_STRUCT
+END_TYPE
+
+// CPU Redundancy Error UDT
+TYPE UDT_RedundancyError EXTENDS UDT_BaseError
+    STRUCT
+        REDUNDANCY_STATUS : INT;             // Current redundancy status
+        SWITCHOVER_COUNT  : INT;             // Number of switchovers
+        PRIMARY_CPU       : BOOL;             // Primary CPU status
+    END_STRUCT
+END_TYPE
+
+// Communication Error UDT
+TYPE UDT_CommError EXTENDS UDT_BaseError
+    STRUCT
+        PRIORITY_CLASS : INT;                // Priority of error
+        RETRY_COUNT    : INT;                // Number of retries
+        TIMEOUT        : TIME;               // Communication timeout
+    END_STRUCT
+END_TYPE
+
+// OB87 - CPU REDUNDANCY ERROR
+ORGANIZATION_BLOCK OB87
+VAR
+    CPU_ERROR : UDT_RedundancyError;         // CPU redundancy error instance
+END_VAR
+BEGIN
+    // Update error information using UDT
+    CPU_ERROR.ERROR_ACTIVE      := TRUE;
+    CPU_ERROR.ERROR_TIMESTAMP   := OB87_DATE_TIME;
+    CPU_ERROR.ERROR_CODE        := OB87_EVT_CLASS;
+    CPU_ERROR.ERROR_TEXT        := 'CPU Redundancy Error';
+    CPU_ERROR.REDUNDANCY_STATUS := OB87_RED_STATUS;
+    
+    // Update SCADA alarms
+    DB1.SCADA_ALARMS.CPU_ERROR := CPU_ERROR;
+END_ORGANIZATION_BLOCK
+
+// Modified SCADA Alarms structure
+DATA_BLOCK DB1
+    STRUCT SCADA_ALARMS
+        HW_ERROR    : UDT_HardwareError;    // Hardware error information
+        COMM_ERROR  : UDT_CommError;        // Communication error information
+        CPU_ERROR   : UDT_RedundancyError;  // CPU error information
+        ALARM_COUNT : INT;                  // Total number of active alarms
+    END_STRUCT;
+END_DATA_BLOCK

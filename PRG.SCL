@@ -1,0 +1,285 @@
+// SIEMENS SCL PROCESS CONTROL
+// (C) 2024 LICENSED UNDER GNU GPL V2
+
+// Organization Block (OB1) - Main Cyclic Program
+ORGANIZATION_BLOCK OB1
+BEGIN
+    // Call the function block instance
+    FB100Instance(Name := 'Test String');
+    
+    // Example usage of the ShipFuelSystem UDT
+    DB1.SHIPFUELSYSTEM.FUELLEVEL := 75.0;         // Set fuel level to 75%
+    DB1.SHIPFUELSYSTEM.FUELTEMPERATURE := 25.0;   // SET FUEL TEMPERATURE TO 25°C
+    DB1.SHIPFUELSYSTEM.FUELPRESSURE := 2.5;       // SET FUEL PRESSURE TO 2.5 BAR
+    DB1.SHIPFUELSYSTEM.PUMPSTATUS := TRUE;        // SET PUMP STATUS TO TRUE (ON)
+    DB1.SHIPFUELSYSTEM.VALVESTATUS := FALSE;      // SET VALVE STATUS TO FALSE (CLOSED)
+
+    // Call the PID controller function block instance
+    PIDController(PV := 50.0, SP := 75.0, MANUAL := FALSE, MANUAL_OUT := 0.0, KP := 1.0, KI := 0.1, KD := 0.01, SCALING := 1.0, OFFSET := 0.0, OUT_HIGH := 100.0, OUT_LOW := 0.0);
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB100) - Startup OB
+ORGANIZATION_BLOCK OB100
+BEGIN
+    // Initialization code here
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB121) - Programming Error OB
+ORGANIZATION_BLOCK OB121
+BEGIN
+    // Handle programming errors here
+    // Example: Set an error flag or log the error
+    ERROR_FLAG := TRUE;
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB122) - Hardware Interrupt OB
+VAR
+    HW_INT_ALARM        : BOOL   := FALSE;    // Hardware interrupt alarm flag
+    ERROR_TIMESTAMP     : DATE_AND_TIME;      // Time of error occurrence
+    ERROR_CODE         : DWORD;              // Error code from hardware
+    ERROR_LOCATION     : STRING;             // Location identifier
+    INTERRUPT_CLASS    : INT;                // Interrupt classification
+END_VAR
+BEGIN
+    // Handle hardware interrupts here
+    ERROR_CODE      := OB122_SW_FLT;
+    ERROR_TIMESTAMP := OB122_DATE_TIME;
+    ERROR_LOCATION  := CONCAT('ADDRESS:', INT_TO_STRING(OB122_OFFSET));
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB82) - Diagnostic Error OB
+VAR
+    DIAG_ERROR_ALARM    : BOOL   := FALSE;    // Diagnostic error alarm flag
+    ERROR_TIMESTAMP     : DATE_AND_TIME;      // Time of error occurrence
+    ERROR_CODE         : DWORD;              // Error code from diagnostic
+    ERROR_LOCATION     : STRING;             // Module location
+    MODULE_ADDRESS     : INT;                // Module address
+END_VAR
+BEGIN
+    // Handle diagnostic errors here
+    ERROR_CODE      := OB82_MDL_DEFECT;
+    ERROR_TIMESTAMP := OB82_DATE_TIME;
+    ERROR_LOCATION  := CONCAT('MODULE:', INT_TO_STRING(OB82_MDL_ADDR));
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB85) - Communication Error OB
+VAR
+    COMM_ERROR_ALARM    : BOOL   := FALSE;    // Communication error alarm flag
+    ERROR_TIMESTAMP     : DATE_AND_TIME;      // Time of error occurrence
+    ERROR_CODE         : DWORD;              // Error code from communication
+    ERROR_LOCATION     : STRING;             // Error location
+    PRIORITY_CLASS     : INT;                // Priority of error
+END_VAR
+BEGIN
+    // Handle communication errors here
+    ERROR_CODE      := OB85_EVT_CLASS;
+    ERROR_TIMESTAMP := OB85_DATE_TIME;
+    ERROR_LOCATION  := CONCAT('PRIORITY:', INT_TO_STRING(OB85_PRIORITY));
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB86) - Rack Failure OB
+VAR
+    RACK_FAILURE_ALARM  : BOOL   := FALSE;    // Rack failure alarm flag
+    MODULE_FAILURE_ALARM: BOOL   := FALSE;    // Module failure alarm flag
+    HARDWARE_ERROR_ALARM: BOOL   := FALSE;    // General hardware error flag
+    ERROR_TIMESTAMP     : DATE_AND_TIME;      // Time of error occurrence
+    ERROR_CODE         : DWORD;              // Error code from hardware
+    ERROR_LOCATION     : STRING;             // Rack/Module location
+    RACK_NUMBER        : INT;                // Rack identification
+END_VAR
+BEGIN
+    // Handle rack failures here
+    ERROR_CODE      := OB86_EVT_CLASS;
+    ERROR_TIMESTAMP := OB86_RACK_FAILURE_TIME;
+    RACK_NUMBER     := OB86_RACK_NUM;
+END_ORGANIZATION_BLOCK
+
+// Organization Block (OB87) - CPU Redundancy Error OB
+VAR
+    CPU_RED_ERROR_ALARM : BOOL   := FALSE;    // CPU redundancy error flag
+    ERROR_TIMESTAMP     : DATE_AND_TIME;      // Time of error occurrence
+    ERROR_CODE         : DWORD;              // Error code from CPU
+    ERROR_LOCATION     : STRING;             // CPU location
+    REDUNDANCY_STATUS  : INT;                // Current redundancy status
+    SWITCHOVER_COUNT   : INT;                // Number of switchovers
+END_VAR
+BEGIN
+    // Handle CPU redundancy errors here
+    ERROR_CODE         := OB87_EVT_CLASS;
+    ERROR_TIMESTAMP    := OB87_DATE_TIME;
+    REDUNDANCY_STATUS  := OB87_RED_STATUS;
+END_ORGANIZATION_BLOCK
+
+DATA_BLOCK DB1
+    STRUCT SCADA_ALARMS
+        HW_INTERRUPT         : BOOL;              // Hardware interrupt flag
+        DIAGNOSTIC_ERROR     : BOOL;              // Diagnostic error flag
+        COMM_ERROR          : BOOL;              // Communication error flag
+        CPU_REDUNDANCY_ERROR : BOOL;              // CPU redundancy error flag
+        ALARM_TEXT          : STRING;            // Descriptive alarm text
+        ERROR_CODE          : DWORD;             // Error code
+        ERROR_TIMESTAMP     : DATE_AND_TIME;     // Time stamp
+        ERROR_LOCATION      : STRING;            // Error location
+        REDUNDANCY_STATUS   : INT;               // Redundancy status
+    END_STRUCT;
+    
+    INSTANCE FB100INSTANCE  : FB100;             // Instance of FB100
+    SHIPFUELSYSTEM         : UDT_SHIPFUELSYSTEM; // Ship fuel system data
+END_DATA_BLOCK
+
+DATA_BLOCK DB100
+    MODE : STRING[100];
+    FAN1 : FANUDT;
+    FAN2 : FANUDT;
+END_DATA_BLOCK
+
+TYPE FANUDT
+    STRUCT
+        FAN_SPEED : INT;
+        FAN_STATUS : BOOL;
+    END_STRUCT
+END_TYPE
+
+TYPE UDT_SHIPFUELSYSTEM
+    STRUCT
+        FUELLEVEL        : REAL;   // Fuel level in percentage
+        FUELTEMPERATURE  : REAL;   // Fuel temperature in degrees Celsius
+        FUELPRESSURE     : REAL;   // Fuel pressure in bar
+        PUMPSTATUS       : BOOL;   // Status of the fuel pump
+        VALVESTATUS      : BOOL;   // Status of the fuel valve
+    END_STRUCT
+END_TYPE
+
+DATA_BLOCK DB105
+    INSTANCE PIDCONTROLLER : FB105;
+END_DATA_BLOCK
+
+FUNCTION_BLOCK FB100    
+// DEFINE ASSIGNED DATA BLOCK (DB)
+    VAR_INPUT
+        DB100 : POINTER TO 
+    END_VAR
+
+    DB(100) : STRUCT
+        NAME : STRING[100]; 
+    END_STRUCT
+
+// DEFINE INPUTS
+    VAR_INPUT
+        NAME : STRING := ''; // Initialize with an empty string
+    END_VAR
+
+    VAR_OUTPUT
+        OUT  : BOOL := FALSE; // Initialize with FALSE
+        QOUT : BOOL := FALSE; // Initialize with FALSE
+        LMN  : REAL := 0.0;   // Initialize with 0.0
+    END_VAR
+
+    VAR
+        I      : INT  := 0;    // Initialize with 0
+        OUTLAW : BOOL := FALSE; // Initialize with FALSE
+    END_VAR
+
+    FOR I := 1 TO LEN(NAME) DO
+        IF (NAME[I] = ' ') THEN
+            OUTLAW := TRUE;
+            RETURN;
+        END_IF;
+    END_FOR;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK FB105
+    VAR_INPUT
+        PV        : REAL;   // Process Variable
+        SP        : REAL;   // Set Point
+        MANUAL    : BOOL;   // Manual Mode
+        MANUAL_OUT: REAL;   // Manual Output
+        KP        : REAL;   // Proportional Gain
+        KI        : REAL;   // Integral Gain
+        KD        : REAL;   // Derivative Gain
+        SCALING   : REAL := 1.0; // Input Scaling
+        OFFSET    : REAL := 0.0; // Input Offset
+        OUT_HIGH  : REAL := 100.0; // High Output Limit
+        OUT_LOW   : REAL := 0.0;   // Low Output Limit
+        HH_LIMIT  : REAL;   // High-High Alarm Limit
+        H_LIMIT   : REAL;   // High Alarm Limit
+        L_LIMIT   : REAL;   // Low Alarm Limit
+        LL_LIMIT  : REAL;   // Low-Low Alarm Limit
+    END_VAR
+    VAR_OUTPUT
+        OUT       : REAL;   // Controller Output
+    END_VAR
+    VAR
+        ERROR     : REAL;   // Error
+        INTEGRAL  : REAL;   // Integral Term
+        DERIVATIVE: REAL;   // Derivative Term
+        LAST_ERROR: REAL;   // Last Error
+        ALARM_STATUS: ARRAY[1..4] OF BOOL; // Alarm status array
+    END_VAR
+
+    // Instances of the alarm function block
+    VAR
+        HH_ALARM  : FB_ALARM;
+        H_ALARM   : FB_ALARM;
+        L_ALARM   : FB_ALARM;
+        LL_ALARM  : FB_ALARM;
+    END_VAR
+
+    // Calculate error
+    ERROR := (SP - PV) * SCALING + OFFSET;
+
+    // Calculate integral term
+    INTEGRAL := INTEGRAL + ERROR * KI;
+
+    // Calculate derivative term
+    DERIVATIVE := (ERROR - LAST_ERROR) * KD;
+
+    // Calculate output
+    IF MANUAL THEN
+        OUT := MANUAL_OUT;
+    ELSE
+        OUT := KP * ERROR + INTEGRAL + DERIVATIVE;
+    END_IF;
+
+    // Apply output limits
+    IF OUT > OUT_HIGH THEN
+        OUT := OUT_HIGH;
+    ELSIF OUT < OUT_LOW THEN
+        OUT := OUT_LOW;
+    END_IF;
+
+    // Update last error
+    LAST_ERROR := ERROR;
+
+    // Check alarms asynchronously using the alarm function block instances
+    HH_ALARM(PV := PV, LIMIT := HH_LIMIT, ALARM_ID := 1);
+    H_ALARM(PV := PV, LIMIT := H_LIMIT, ALARM_ID := 2);
+    L_ALARM(PV := PV, LIMIT := L_LIMIT, ALARM_ID := 3);
+    LL_ALARM(PV := PV, LIMIT := LL_LIMIT, ALARM_ID := 4);
+
+    // Update alarm status array
+    ALARM_STATUS[1] := HH_ALARM.ALARM_ACTIVE;
+    ALARM_STATUS[2] := H_ALARM.ALARM_ACTIVE;
+    ALARM_STATUS[3] := L_ALARM.ALARM_ACTIVE;
+    ALARM_STATUS[4] := LL_ALARM.ALARM_ACTIVE;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK FB_ALARM
+    VAR_INPUT
+        PV       : REAL;   // Process Variable
+        LIMIT    : REAL;   // Alarm Limit
+        ALARM_ID : INT;    // Alarm Identifier
+    END_VAR
+    VAR_OUTPUT
+        ALARM_ACTIVE : BOOL; // Alarm Active Status
+    END_VAR
+
+    // Check if the alarm condition is met
+    ALARM_ACTIVE := FALSE;
+    CASE ALARM_ID OF
+        1: ALARM_ACTIVE := PV > LIMIT; // High-High Alarm
+        2: ALARM_ACTIVE := PV > LIMIT; // High Alarm
+        3: ALARM_ACTIVE := PV < LIMIT; // Low Alarm
+        4: ALARM_ACTIVE := PV < LIMIT; // Low-Low Alarm
+    END_CASE;
+END_FUNCTION_BLOCK
