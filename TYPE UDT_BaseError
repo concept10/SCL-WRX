@@ -42,14 +42,14 @@ VAR
     CPU_ERROR : UDT_RedundancyError;         // CPU redundancy error instance
 END_VAR
 BEGIN
-    // Update error information using UDT
+    // DCS CPU Error UDT
     CPU_ERROR.ERROR_ACTIVE      := TRUE;
     CPU_ERROR.ERROR_TIMESTAMP   := OB87_DATE_TIME;
     CPU_ERROR.ERROR_CODE        := OB87_EVT_CLASS;
     CPU_ERROR.ERROR_TEXT        := 'CPU Redundancy Error';
     CPU_ERROR.REDUNDANCY_STATUS := OB87_RED_STATUS;
     
-    // Update SCADA alarms
+    // Compile and Update Alarms 
     DB1.SCADA_ALARMS.CPU_ERROR := CPU_ERROR;
 END_ORGANIZATION_BLOCK
 
