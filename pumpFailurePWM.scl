@@ -1,0 +1,121 @@
+// Function block: FB_RateOfChange_AlarmPWM
+// Calculates the percent change of a flow rate over 5 minutes,
+// raises high, high-high, low, and low-low alarms,
+// and (if |change| > 15%) drives two pump outputs via PWM.
+FUNCTION_BLOCK FB_RateOfChange_AlarmPWM
+{attribute 'Documentation' := 'Calculates flow rate percent change over 5 minutes and triggers alarms (High, HighHigh, Low, LowLow). If |change| >15%, it modulates two pump outputs with PWM.'}
+VAR_INPUT
+    PV            : REAL;         // Current measured flow rate (e.g. in GPM)
+    Setpoint      : REAL;         // Desired flow rate (GPM)
+    TBase         : TIME := T#5m;  // Measurement period for rate calculation
+    HighThreshold : REAL := 15.0;   // High alarm threshold in %
+    HighHighThreshold : REAL := 20.0; // High-high alarm threshold in %
+    LowThreshold  : REAL := -15.0;  // Low alarm threshold in %
+    LowLowThreshold: REAL := -20.0;  // Low-low alarm threshold in %
+    PWM_Period    : TIME := T#1s;   // PWM period
+    PWM_MinDuty   : REAL := 10.0;   // Minimum duty cycle (in %)
+    PWM_MaxDuty   : REAL := 100.0;  // Maximum duty cycle (in %)
+    CycleTime     : TIME := T#100ms; // PLC cycle time (assumed constant)
+END_VAR
+VAR_OUTPUT
+    RatePercent   : REAL;         // Calculated percent change (in %)
+    Alarm_High    : BOOL;         // High alarm flag
+    Alarm_HighHigh: BOOL;         // High-high alarm flag
+    Alarm_Low     : BOOL;         // Low alarm flag
+    Alarm_LowLow  : BOOL;         // Low-low alarm flag
+    Pump1_PWM     : BOOL;         // PWM output for pump 1
+    Pump2_PWM     : BOOL;         // PWM output for pump 2
+END_VAR
+VAR
+    LastPV          : REAL := 0.0;   // Last measured PV used for calculation
+    MeasurementTimer: TIME := T#0s;  // Accumulates cycle time until TBase is reached
+    PWM_Timer       : TIME := T#0s;  // Timer used for PWM cycle
+    DutyCycle       : REAL := 0.0;   // Computed duty cycle in percentage
+    IsPWMActive     : BOOL := FALSE; // Flag to indicate if PWM modulation is active
+    ComputedRate    : REAL := 0.0;   // Temporary variable for percent change calculation
+
+    // Internal variables for PWM conversion:
+    PWM_Period_Real : REAL;         // PWM_Period (seconds)
+    PWM_Timer_Real  : REAL;         // PWM_Timer (seconds)
+    PWM_Threshold   : TIME;         // Computed on-time based on DutyCycle
+END_VAR
+BEGIN
+    //--- Measurement: Update RatePercent every TBase (5 minutes) ---
+    MeasurementTimer := MeasurementTimer + CycleTime;
+    IF MeasurementTimer >= TBase THEN
+        // Calculate percent change: ((current PV - last PV) / Setpoint) * 100
+        ComputedRate := ((PV - LastPV) / Setpoint) * 100.0;
+        RatePercent := ComputedRate;
+        LastPV := PV;
+        MeasurementTimer := T#0s;
+    END_IF;
+    
+    //--- Alarm Logic ---
+    // For high alarms:
+    IF RatePercent >= HighHighThreshold THEN
+        Alarm_HighHigh := TRUE;
+        Alarm_High := FALSE;
+    ELSIF RatePercent >= HighThreshold THEN
+        Alarm_High := TRUE;
+        Alarm_HighHigh := FALSE;
+    ELSE
+        Alarm_High := FALSE;
+        Alarm_HighHigh := FALSE;
+    END_IF;
+    // For low alarms:
+    IF RatePercent <= LowLowThreshold THEN
+        Alarm_LowLow := TRUE;
+        Alarm_Low := FALSE;
+    ELSIF RatePercent <= LowThreshold THEN
+        Alarm_Low := TRUE;
+        Alarm_LowLow := FALSE;
+    ELSE
+        Alarm_Low := FALSE;
+        Alarm_LowLow := FALSE;
+    END_IF;
+    
+    //--- PWM Activation: if |RatePercent| > HighThreshold (15%) then enable PWM ---
+    IF ABS(RatePercent) > HighThreshold THEN
+        IsPWMActive := TRUE;
+        // Compute duty cycle linearly:
+        IF RatePercent > 0 THEN
+            // Map rate from HighThreshold to HighHighThreshold onto PWM_MinDuty..PWM_MaxDuty
+            DutyCycle := PWM_MinDuty + ((RatePercent - HighThreshold) / (HighHighThreshold - HighThreshold)) * (PWM_MaxDuty - PWM_MinDuty);
+            IF DutyCycle > PWM_MaxDuty THEN DutyCycle := PWM_MaxDuty; END_IF;
+        ELSIF RatePercent < 0 THEN
+            DutyCycle := PWM_MinDuty + ((ABS(RatePercent) - ABS(LowThreshold)) / (ABS(LowLowThreshold) - ABS(LowThreshold))) * (PWM_MaxDuty - PWM_MinDuty);
+            IF DutyCycle > PWM_MaxDuty THEN DutyCycle := PWM_MaxDuty; END_IF;
+        END_IF;
+    ELSE
+        IsPWMActive := FALSE;
+        DutyCycle := 0.0;
+    END_IF;
+    
+    //--- PWM Timing: Update PWM_Timer each cycle ---
+    PWM_Timer := PWM_Timer + CycleTime;
+    IF PWM_Timer >= PWM_Period THEN
+        PWM_Timer := T#0s;
+    END_IF;
+    
+    // Convert PWM timing to REAL (seconds) for comparison.
+    PWM_Period_Real := TIME_TO_REAL(PWM_Period);  // seconds
+    PWM_Timer_Real  := TIME_TO_REAL(PWM_Timer);    // seconds
+    // Compute the on-time threshold (in seconds) corresponding to the duty cycle.
+    // (DutyCycle is a percentage, so on-time = (DutyCycle/100)*PWM_Period_Real)
+    PWM_Threshold := REAL_TO_TIME((DutyCycle / 100.0) * PWM_Period_Real);
+    
+    //--- Generate PWM Output: If PWM is active, drive both pump outputs with the PWM signal.
+    IF IsPWMActive THEN
+        IF PWM_Timer < PWM_Threshold THEN
+            Pump1_PWM := TRUE;
+            Pump2_PWM := TRUE;
+        ELSE
+            Pump1_PWM := FALSE;
+            Pump2_PWM := FALSE;
+        END_IF;
+    ELSE
+        // If no PWM is needed, outputs remain off (or could be set to a default state as required)
+        Pump1_PWM := FALSE;
+        Pump2_PWM := FALSE;
+    END_IF;
+END_FUNCTION_BLOCK

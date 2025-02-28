@@ -5,7 +5,7 @@
 ORGANIZATION_BLOCK OB1
 BEGIN
     // Call the function block instance
-    FB100Instance(Name := 'Test String');
+    FB100Instance(Name := 'FB100/FUEL');
     
     // Example usage of the ShipFuelSystem UDT
     DB1.SHIPFUELSYSTEM.FUELLEVEL := 75.0;         // Set fuel level to 75%
