@@ -1,0 +1,26 @@
+FUNCTION_BLOCK FB_RateOfChange_1
+    VAR
+        AnalogValue   : REAL;   // Current Analog Value
+        PrevValue     : REAL;   // Stored Previous Value
+        DeltaTime     : TIME := T#5M; // 5-minute interval
+        LastUpdate    : TIME;   // Last update time
+        RateOfChange  : REAL;   // Rate of Change Output
+    END_VAR
+BEGIN
+    // Check if 5 minutes have passed
+    IF (T_PLC_MS() - LastUpdate >= DeltaTime) THEN
+        RateOfChange := (AnalogValue - PrevValue) / REAL_TO_TIME_IN_SECONDS(DeltaTime);
+        PrevValue := AnalogValue;
+        LastUpdate := T_PLC_MS(); // Reset timer
+    END_IF;
+END_FUNCTION_BLOCK
+
+/*
+
+
+
+
+
+
+
+*/
