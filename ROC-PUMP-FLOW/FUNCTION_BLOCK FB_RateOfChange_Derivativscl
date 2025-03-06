@@ -1,0 +1,19 @@
+FUNCTION_BLOCK FB_RateOfChange_Derivative
+{attribute 'Documentation' := 'Calculates the rate of change using a derivative function block (e.g., from the Siemens APL library).'}
+VAR_INPUT
+    AnalogValue : REAL;  // Current analog measurement
+END_VAR
+VAR_OUTPUT
+    RateOfChange : REAL; // [units/sec] Calculated derivative
+END_VAR
+VAR
+    // Instance of the derivative block from the APL library.
+    // Ensure that FB41_DERIVATIVE is added to your project.
+    DerivBlock : FB41_DERIVATIVE;
+    DeltaT     : REAL := 300.0;  // 5 minutes expressed in seconds (5 * 60)
+END_VAR
+BEGIN
+    // Call the derivative function block.
+    // Parameters: EN (enable), X (current value), T (time interval in seconds), Y (output derivative).
+    DerivBlock(EN := TRUE, X := AnalogValue, T := DeltaT, Y => RateOfChange);
+END_FUNCTION_BLOCK
