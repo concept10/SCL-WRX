@@ -1,0 +1,93 @@
+FUNCTION_BLOCK FB_PumpMonitor
+VAR_INPUT
+    Flow1        : REAL;    // Flow from pump 1
+    Flow2        : REAL;    // Flow from pump 2
+    Enable       : BOOL;    // System enable signal
+    Reset        : BOOL;    // Manual reset signal
+    PWM_Period   : TIME := T#500MS;  // PWM cycle time
+    Flow_Threshold : REAL := 0.1; // Minimum flow change to detect movement
+    Max_Retries  : INT := 3;  // Maximum retry attempts before failure
+END_VAR
+
+VAR_OUTPUT
+    Pump1_PWM    : BOOL;   // PWM output for pump 1 solenoid
+    Pump2_PWM    : BOOL;   // PWM output for pump 2 solenoid
+    Pump1_Fail   : BOOL;   // Pump 1 failure detected
+    Pump2_Fail   : BOOL;   // Pump 2 failure detected
+    Pump1_Alarm  : BOOL;   // Alarm signal for WinCC Unified
+    Pump2_Alarm  : BOOL;   // Alarm signal for WinCC Unified
+END_VAR
+
+VAR
+    Flow1_Start  : REAL;  // Initial flow reading for pump 1
+    Flow2_Start  : REAL;  // Initial flow reading for pump 2
+    PWM_Timer    : TON;   // Timer for PWM control
+    Pump1_Active : BOOL;  // Pump 1 currently being tested
+    Pump2_Active : BOOL;  // Pump 2 currently being tested
+    Retry_Count1 : INT;   // Retry counter for Pump 1
+    Retry_Count2 : INT;   // Retry counter for Pump 2
+    Failure_Timestamp1 : DATE_AND_TIME; // Timestamp for Pump 1 failure
+    Failure_Timestamp2 : DATE_AND_TIME; // Timestamp for Pump 2 failure
+END_VAR
+
+// Reset logic
+IF Reset THEN
+    Pump1_Fail := FALSE;
+    Pump2_Fail := FALSE;
+    Pump1_Alarm := FALSE;
+    Pump2_Alarm := FALSE;
+    Retry_Count1 := 0;
+    Retry_Count2 := 0;
+END_IF;
+
+// Initialize when enabled
+IF Enable AND NOT (Pump1_Active OR Pump2_Active) THEN
+    Flow1_Start := Flow1;
+    Flow2_Start := Flow2;
+    Pump1_Active := TRUE;
+    Pump1_PWM := TRUE;
+    PWM_Timer(IN := TRUE, PT := PWM_Period);
+END_IF;
+
+// PWM control logic
+IF PWM_Timer.Q THEN
+    PWM_Timer(IN := FALSE);
+
+    IF Pump1_Active THEN
+        Pump1_PWM := FALSE;
+        Pump1_Active := FALSE;
+        Pump2_Active := TRUE;
+        Pump2_PWM := TRUE;
+        PWM_Timer(IN := TRUE, PT := PWM_Period);
+    ELSIF Pump2_Active THEN
+        Pump2_PWM := FALSE;
+        Pump2_Active := FALSE;
+    END_IF;
+END_IF;
+
+// Flow difference check after pulsing
+IF NOT Pump1_Active AND NOT Pump2_Active THEN
+    IF ABS(Flow1 - Flow1_Start) < Flow_Threshold THEN
+        Retry_Count1 := Retry_Count1 + 1;
+        IF Retry_Count1 >= Max_Retries THEN
+            Pump1_Fail := TRUE;
+            Pump1_Alarm := TRUE;
+            Failure_Timestamp1 := DT_TODAY();
+        END_IF;
+    ELSE
+        Retry_Count1 := 0;
+    END_IF;
+
+    IF ABS(Flow2 - Flow2_Start) < Flow_Threshold THEN
+        Retry_Count2 := Retry_Count2 + 1;
+        IF Retry_Count2 >= Max_Retries THEN
+            Pump2_Fail := TRUE;
+            Pump2_Alarm := TRUE;
+            Failure_Timestamp2 := DT_TODAY();
+        END_IF;
+    ELSE
+        Retry_Count2 := 0;
+    END_IF;
+END_IF;
+
+END_FUNCTION_BLOCK
