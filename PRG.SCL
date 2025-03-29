@@ -166,6 +166,7 @@ FUNCTION_BLOCK FB100
 
 // DEFINE INPUTS
     VAR_INPUT
+    
         NAME : STRING := ''; // Initialize with an empty string
     END_VAR
 
